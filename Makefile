@@ -62,13 +62,12 @@ GIT=git
 OFFIMG_LOCAL_CLONE=$(HOME)/official-images
 OFFIMG_REPO_URL=https://github.com/docker-library/official-images.git
 
-
 build: $(foreach version,$(VERSIONS),build-$(version))
 
 all: update build test
 
 update:
-	$(DOCKER) run --rm -v $$(pwd):/work -w /work buildpack-deps ./update.sh
+	$(DOCKER) run --rm -v $$(pwd):/work -w /work buildpack-deps:focal ./update.sh
 
 
 ### RULES FOR BUILDING ###
@@ -76,11 +75,11 @@ update:
 define build-version
 build-$1:
 ifeq ($(do_default),true)
-	$(DOCKER) buildx build --platform linux/amd64 --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
+	$(DOCKER) buildx build --platform $(file < $1/platforms) --pull --push -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) buildx build --platform linux/amd64 --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
+	$(DOCKER) buildx build --platform $(file < $1/alpine/platforms) --pull --push -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
 endif
 endif
 endef
@@ -99,10 +98,12 @@ test: $(foreach version,$(VERSIONS),test-$(version))
 define test-version
 test-$1: test-prepare build-$1
 ifeq ($(do_default),true)
+	$(DOCKER) image pull $(REPO_NAME)/$(IMAGE_NAME):$(version)
 	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
+	$(DOCKER) image pull $(REPO_NAME)/$(IMAGE_NAME):$(version)
 	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine
 endif
 endif
