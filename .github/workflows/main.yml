@@ -43,8 +43,8 @@ jobs:
     - name: Check docker info
       run: docker info
 
-    - name: Check docker configuration
-      run: ls -al /etc/docker/daemon.json
+#    - name: Check docker configuration
+#      run: ls -al /etc/docker/daemon.json
 
     - name: Check docker driver status
       run: docker info -f '{{ .DriverStatus }}'
