@@ -16,9 +16,9 @@ jobs:
     strategy:
       matrix:
 #        postgres: [13, 14, 15, 16, 17]
-        postgres: [16, 17]
-#        postgis: ['3.5']
-        postgis: ['master']
+        postgres: [17]
+        postgis: ['3.5']
+#        postgis: ['master']
 #        variant: [default, alpine]
         variant: [default]
 #        include:
@@ -40,20 +40,38 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
 
-    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
-      run: make test
+    - name: Check docker info
+      run: docker info
 
-    - name: Login to dockerhub
-      uses: docker/login-action@v3
-      if: ${{  (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request')  }}
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+    - name: Check docker configuration
+      run: ls -al /etc/docker/daemon.json
 
-    - name: Push docker image to dockerhub
-      if: ${{  (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request')  }}
-      env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        DOCKERHUB_ACCESS_TOKEN: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-      run: make push
+    - name: Check docker driver status
+      run: docker info -f '{{ .DriverStatus }}'
+
+    - name: Try loading binfmt
+      run: docker run --privileged --rm tonistiigi/binfmt --install all
+
+    - name: List docker images w/o tree option
+      run: docker images
+
+    - name: List docker images w/ tree option
+      run: docker images --tree
+
+#    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
+#      run: make test
+
+#    - name: Login to dockerhub
+#      uses: docker/login-action@v3
+#      if: ${{  (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request')  }}
+#      with:
+#        username: ${{ secrets.DOCKERHUB_USERNAME }}
+#        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+
+#    - name: Push docker image to dockerhub
+#      if: ${{  (github.ref == 'refs/heads/master') && (github.event_name != 'pull_request')  }}
+#      env:
+#        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+#        DOCKERHUB_ACCESS_TOKEN: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+#      run: make push
 
