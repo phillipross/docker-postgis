@@ -40,23 +40,26 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
 
-    - name: Check docker info
-      run: docker info
+    - name: Check packages
+      run: id && for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+
+#    - name: Check docker info
+#      run: docker info
 
 #    - name: Check docker configuration
 #      run: ls -al /etc/docker/daemon.json
 
-    - name: Check docker driver status
-      run: docker info -f '{{ .DriverStatus }}'
+#    - name: Check docker driver status
+#      run: docker info -f '{{ .DriverStatus }}'
 
-    - name: Try loading binfmt
-      run: docker run --privileged --rm tonistiigi/binfmt --install all
+#    - name: Try loading binfmt
+#      run: docker run --privileged --rm tonistiigi/binfmt --install all
 
-    - name: List docker images w/o tree option
-      run: docker images
+#    - name: List docker images w/o tree option
+#      run: docker images
 
-    - name: List docker images w/ tree option
-      run: docker images --tree
+#    - name: List docker images w/ tree option
+#      run: docker images --tree
 
 #    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
 #      run: make test
