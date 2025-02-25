@@ -81,7 +81,7 @@ jobs:
         password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
     - name: Stub for testing push conditions
-      if: ${{ (${{ matrix.runner-platform == 'ubuntu-24.04' }}) }}
+      if: ${{ ( matrix.runner-platform == 'ubuntu-24.04' ) }}
       run: docker image ls --tree
 
 #    - name: Push docker image to dockerhub
