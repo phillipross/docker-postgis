@@ -15,8 +15,8 @@ jobs:
   make-docker-images:
     strategy:
       matrix:
-        runner-platform: ['ubuntu-24.04-arm']
-        docker-ce-version: ['5:28.0.0-1~ubuntu.24.04~noble']
+        runner-platform: ['ubuntu-24.04', 'ubuntu-24.04-arm']
+        docker-apt-pkg-ver: ['5:28.0.0-1~ubuntu.24.04~noble']
 #        postgres: [13, 14, 15, 16, 17]
         postgres: [17]
         postgis: ['3.5']
@@ -39,9 +39,11 @@ jobs:
       VARIANT: ${{ matrix.variant }}
 
     steps:
-    - name: Check docker installation process
+    - name: Install/config specific version of Docker packages
       run: |
+        echo "***** Removing any currently installed conflicting packages..."
         for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+        echo "***** Setting up Docker's APT repo..."
         sudo apt-get update
         sudo apt-get install ca-certificates curl
         sudo install -m 0755 -d /etc/apt/keyrings
@@ -52,35 +54,27 @@ jobs:
           $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
           sudo apt-get update
-        sudo apt-get install docker-ce=${{ matrix.docker-ce-version }} docker-ce-cli=${{ matrix.docker-ce-version }} containerd.io docker-buildx-plugin docker-compose-plugin
+        echo "***** Installing Docker packages..."
+        sudo apt-get install docker-ce=${{ matrix.docker-apt-pkg-ver }} docker-ce-cli=${{ matrix.docker-apt-pkg-ver }} containerd.io docker-buildx-plugin docker-compose-plugin
+        echo "***** Verifying initial Docker installation..."
+        docker run hello-world
+        echo "***** Displaying Docker information..."
+        docker info
+        echo "***** Configuring Docker for containerd image store..."
         echo "{ \"features\": { \"containerd-snapshotter\": true }}" | sudo tee /etc/docker/daemon.json
         sudo systemctl restart docker
-        docker run hello-world
+        docker info -f '{{ .DriverStatus }}'
+
+    - name: Try loading binfmt
+      run: |
+        docker run --privileged --rm tonistiigi/binfmt --install all
+        docker images --tree
 
     - name: Checkout source
       uses: actions/checkout@v4
 
-    - name: Check docker info
-      run: docker info
-
-    - name: Check docker configuration
-      run: |
-        ls -al /etc/ && ls -al /etc/docker/ && cat /etc/docker/daemon.json || echo "------"
-
-    - name: Check docker driver status
-      run: docker info -f '{{ .DriverStatus }}'
-
-    - name: Try loading binfmt
-      run: docker run --privileged --rm tonistiigi/binfmt --install all
-
-    - name: List docker images w/o tree option
-      run: docker images
-
-    - name: List docker images w/ tree option
-      run: docker images --tree
-
-#    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
-#      run: make test
+    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
+      run: make test
 
 #    - name: Login to dockerhub
 #      uses: docker/login-action@v3
