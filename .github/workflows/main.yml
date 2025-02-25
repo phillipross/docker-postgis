@@ -41,7 +41,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Check packages
-      run: id && for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+      run: id && which docker && for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
 
 #    - name: Check docker info
 #      run: docker info
