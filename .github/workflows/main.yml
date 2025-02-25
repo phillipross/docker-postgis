@@ -37,13 +37,8 @@ jobs:
       VARIANT: ${{ matrix.variant }}
 
     steps:
-    - name: Checkout source
-      uses: actions/checkout@v4
-
     - name: Check docker installation process
       run: |
-        id
-        which docker
         for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
         sudo apt-get update
         sudo apt-get install ca-certificates curl
@@ -58,23 +53,27 @@ jobs:
         sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         docker run hello-world
 
-#    - name: Check docker info
-#      run: docker info
+    - name: Checkout source
+      uses: actions/checkout@v4
 
-#    - name: Check docker configuration
-#      run: ls -al /etc/docker/daemon.json
+    - name: Check docker info
+      run: docker info
 
-#    - name: Check docker driver status
-#      run: docker info -f '{{ .DriverStatus }}'
+    - name: Check docker configuration
+      run: |
+        ls -al /etc/ && ls -al /etc/docker/ && cat /etc/docker/daemon.json || echo "------"
 
-#    - name: Try loading binfmt
-#      run: docker run --privileged --rm tonistiigi/binfmt --install all
+    - name: Check docker driver status
+      run: docker info -f '{{ .DriverStatus }}'
 
-#    - name: List docker images w/o tree option
-#      run: docker images
+    - name: Try loading binfmt
+      run: docker run --privileged --rm tonistiigi/binfmt --install all
 
-#    - name: List docker images w/ tree option
-#      run: docker images --tree
+    - name: List docker images w/o tree option
+      run: docker images
+
+    - name: List docker images w/ tree option
+      run: docker images --tree
 
 #    - name: Build docker image for ${{ env.VERSION }} ${{ env.VARIANT }}
 #      run: make test
