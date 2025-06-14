@@ -52,16 +52,22 @@ endif
 
 # The repository and image names default to the official but can be overriden
 # via environment variables.
-REPO_NAME  ?= postgis
-IMAGE_NAME ?= postgis
+REPO_NAME         ?= postgis
+IMAGE_NAME_BASE   ?= postgis
+IMAGE_NAME_PREFIX ?= ""
+IMAGE_NAME_SUFFIX ?= ""
+IMAGE_NAME        ?= $(IMAGE_NAME_PREFIX)$(IMAGE_NAME_BASE)$(IMAGE_NAME_SUFFIX)
+TAG_SUFFIX        ?= ""
+
+EXTERNAL_CACHE_DIR_NAME ?= external-cache
 
 DOCKER=docker
 DOCKERHUB_DESC_IMG=peterevans/dockerhub-description:latest
 
 GIT=git
-OFFIMG_LOCAL_CLONE=$(HOME)/official-images
+OFFIMG_LOCAL_CLONE ?= $(HOME)/official-images
 OFFIMG_REPO_URL=https://github.com/docker-library/official-images.git
-
+EXTERNAL_CACHE_DIR ?= external_cache
 
 build: $(foreach version,$(VERSIONS),build-$(version))
 
@@ -70,19 +76,71 @@ all: update build test
 update:
 	$(DOCKER) run --rm -v $$(pwd):/work -w /work buildpack-deps ./update.sh
 
+binfmt:
+	$(DOCKER) run --privileged --rm tonistiigi/binfmt --install all
+	$(DOCKER) images --tree
+
+image-list-postgis:
+	$(DOCKER) image ls $(REPO_NAME)/$(IMAGE_NAME) --format "{{.Repository}}:{{.Tag}}"
+
+image-list-postgis-full:
+	$(DOCKER) image ls --tree $(REPO_NAME)/$(IMAGE_NAME)
+
+image-remove-postgis:
+	$(DOCKER) image rm $(shell $(DOCKER) image ls $(REPO_NAME)/$(IMAGE_NAME) --format "{{.Repository}}:{{.Tag}}")
+
+image-list-librarytest-postgres-initdb:
+	$(DOCKER) image ls librarytest/postgres-initdb --format "{{.Repository}}:{{.Tag}}"
+
+image-list-librarytest-postgres-initdb-full:
+	$(DOCKER) image ls --tree librarytest/postgres-initdb
+
+image-remove-librarytest-postgres-initdb:
+	$(DOCKER) image rm $(shell $(DOCKER) image ls librarytest/postgres-initdb --format "{{.Repository}}:{{.Tag}}")
+
+image-prune:
+	$(DOCKER) image prune -f
+
+buildx-prune:
+	$(DOCKER) buildx prune -f
+
+buildx-du:
+	$(DOCKER) buildx du
+
+buildx-inspect:
+	$(DOCKER) buildx inspect
+
+external-cache-remove:
+	rm -Rf $(EXTERNAL_CACHE_DIR_NAME)
+
+external-cache-du:
+	du -hs $(EXTERNAL_CACHE_DIR_NAME)
+
+diskfree:
+	df -h
+
+diskfree-local:
+	df -h .
+
 
 ### RULES FOR BUILDING ###
 
 define build-version
 build-$1:
 ifeq ($(do_default),true)
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)
+	$(DOCKER) build --pull $(PLATFORMS) \
+	       	--cache-from type=local,src=$(EXTERNAL_CACHE_DIR_NAME)/$(REPO_NAME)/$(IMAGE_NAME)/$(shell echo $1)$(TAG_SUFFIX) \
+	       	--cache-to type=local,mode=max,dest=$(EXTERNAL_CACHE_DIR_NAME)/$(REPO_NAME)/$(IMAGE_NAME)/$(shell echo $1)$(TAG_SUFFIX) \
+	       	-t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)$(TAG_SUFFIX) $1
+	$(DOCKER) images $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)$(TAG_SUFFIX)
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine
+	$(DOCKER) build --pull $(PLATFORMS) \
+	       	--cache-from type=local,src=$(EXTERNAL_CACHE_DIR_NAME)/$(REPO_NAME)/$(IMAGE_NAME)/$(shell echo $1)-alpine$(TAG_SUFFIX) \
+	       	--cache-to type=local,mode=max,dest=$(EXTERNAL_CACHE_DIR_NAME)/$(REPO_NAME)/$(IMAGE_NAME)/$(shell echo $1)-alpine$(TAG_SUFFIX) \
+	       	-t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine$(TAG_SUFFIX) $1/alpine
+	$(DOCKER) images $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine$(TAG_SUFFIX)
 endif
 endif
 endef
@@ -101,11 +159,11 @@ test: $(foreach version,$(VERSIONS),test-$(version))
 define test-version
 test-$1: test-prepare build-$1
 ifeq ($(do_default),true)
-	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)
+	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)$(TAG_SUFFIX)
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
-	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine
+	$(OFFIMG_LOCAL_CLONE)/test/run.sh -c $(OFFIMG_LOCAL_CLONE)/test/config.sh -c test/postgis-config.sh $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine$(TAG_SUFFIX)
 endif
 endif
 endef
@@ -125,11 +183,11 @@ push: $(foreach version,$(VERSIONS),push-$(version)) $(PUSH_DEP)
 define push-version
 push-$1: test-$1
 ifeq ($(do_default),true)
-	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)
+	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)$(TAG_SUFFIX)
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine
+	$(DOCKER) image push $(REPO_NAME)/$(IMAGE_NAME):$(version)-alpine$(TAG_SUFFIX)
 endif
 endif
 endef
@@ -144,7 +202,11 @@ push-latest: tag-latest $(PUSH_LATEST_DEP)
                       -e README_FILEPATH='/workspace/README.md' $(DOCKERHUB_DESC_IMG)
 
 
-.PHONY: build all update test-prepare test tag-latest push push-latest \
+.PHONY: build all update test-prepare test tag-latest push push-latest binfmt \
+       	image-list-postgis image-list-postgis-full image-remove-postgis \
+       	image-list-librarytest-postgres-initdb image-list-librarytest-postgres-initdb-full image-remove-librarytest-postgres-initdb \
+       	image-prune buildx-prune buildx-du buildx-inspect \
+	external-cache-remove external-cache-du diskfree diskfree-local \
         $(foreach version,$(VERSIONS),build-$(version)) \
         $(foreach version,$(VERSIONS),test-$(version)) \
         $(foreach version,$(VERSIONS),push-$(version))
