@@ -11,6 +11,21 @@ LATEST_VERSION=17-3.5
 do_default=true
 do_alpine=true
 
+# Detect the hardware platform
+ARCH := $(shell uname -m)
+
+# The following logic detects if the build is running on an x86 architecture or
+# arm architecture and set the PLATFORM variable to the corresponding value used
+# by docker to represent which platform(s) to operate on.
+PLATFORM := $(PLATFORM)
+ifeq ($(PLATFORM),)
+	ifeq ($(ARCH),x86_64)
+		PLATFORM := "linux/amd64"
+	else ifneq (,$(filter $(ARCH),aarch64 arm64))
+		PLATFORM := "linux/arm64"
+	endif
+endif
+
 # The following logic evaluates VERSION and VARIANT variables that may have
 # been previously specified, and modifies the "do" flags depending on the values.
 # The VERSIONS variable is also set to contain the version(s) to be processed.
@@ -59,8 +74,12 @@ DOCKER=docker
 DOCKERHUB_DESC_IMG=peterevans/dockerhub-description:latest
 
 GIT=git
-OFFIMG_LOCAL_CLONE=$(HOME)/official-images
+OFFIMG_LOCAL_CLONE ?= $(HOME)/official-images
 OFFIMG_REPO_URL=https://github.com/docker-library/official-images.git
+EXTERNAL_CACHE_DIR ?= external_cache
+
+debug:
+	@printf "arch [%s] platform [%s] external-cache-dir [%s]\n" "${ARCH}" "${PLATFORM}" "${EXTERNAL_CACHE_DIR}"
 
 
 build: $(foreach version,$(VERSIONS),build-$(version))
@@ -76,13 +95,19 @@ update:
 define build-version
 build-$1:
 ifeq ($(do_default),true)
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)
+	$(DOCKER) build --pull \
+	                --cache-from type=local,src=$(EXTERNAL_CACHE_DIR)/$(shell echo $1) \
+	                --cache-to type=local,dest=$(EXTERNAL_CACHE_DIR)/$(shell echo $1) \
+	                -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1) $1
+	$(DOCKER) images $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)
 endif
 ifeq ($(do_alpine),true)
 ifneq ("$(wildcard $1/alpine)","")
-	$(DOCKER) build --pull -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
-	$(DOCKER) images          $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine
+	$(DOCKER) build --pull \
+	                --cache-from type=local,src=$(EXTERNAL_CACHE_DIR)/$(shell echo $1) \
+	                --cache-to type=local,dest=$(EXTERNAL_CACHE_DIR)/$(shell echo $1) \
+	                -t $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine $1/alpine
+	$(DOCKER) images $(REPO_NAME)/$(IMAGE_NAME):$(shell echo $1)-alpine
 endif
 endif
 endef
